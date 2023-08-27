@@ -1,0 +1,149 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+</head>
+<body>
+    <div class="container">
+        <form id="videoForm">
+            <input type="text" id="videoUrl" placeholder="Enter YouTube URL">
+            <button type="submit">Display Video</button>
+        </form>
+        <div class="video-container">
+            <iframe id="videoPlayer" width="640" height="360" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+        </div>
+    <textarea id="chat-log" cols="100" rows="20"></textarea><br>
+    <input id="chat-message-input" type="text" size="100"><br>
+    <input id="chat-message-submit" type="button" value="Send">
+    </div>
+    {{ room_name|json_script:"room-name" }}
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+        const roomName = JSON.parse(document.getElementById('room-name').textContent);
+        const socket = new WebSocket(
+            'wss://' + window.location.host + '/ws/app/' + roomName + '/'
+        );
+
+        // Wait for the WebSocket connection to open before sending data
+        socket.onopen = () => {
+            document.querySelector('#chat-message-submit').onclick = function(e) {
+                const messageInputDom = document.querySelector('#chat-message-input');
+                const message = messageInputDom.value;
+
+                // Send data only when the WebSocket connection is open
+                if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({ 'message': message }));
+                }
+
+                messageInputDom.value = '';
+            };
+        };
+
+        socket.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            const videoId = data.video_id;
+            console.log(data.message);
+            if (videoId) {
+                updateVideoPlayer(videoId);
+            }
+            if (data.state && data.currentTime) {
+                handleVideoSync(data.state, data.currentTime);
+            }
+            document.querySelector('#chat-log').value += (data.message + '\n');
+        };
+
+        document.querySelector('#chat-message-input').focus();
+        document.querySelector('#chat-message-input').onkeyup = function(e) {
+            if (e.keyCode === 13) {  // enter, return
+                document.querySelector('#chat-message-submit').click();
+            }
+        };
+
+        const videoPlayer = document.getElementById('videoPlayer');
+
+        function updateVideoPlayer(videoId) {
+            const videoPlayer = document.getElementById('videoPlayer');
+            videoPlayer.src = `https://www.youtube.com/embed/${videoId}`;
+        }
+
+        let player;
+
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('videoPlayer', {
+                height: '360',
+                width: '640',
+                events: {
+                    'onReady': onPlayerReady,
+                    'onStateChange': onPlayerStateChange,
+                },
+            });
+        }
+
+        const videoForm = document.getElementById('videoForm');
+        const videoUrlInput = document.getElementById('videoUrl');
+
+        videoForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const url = videoUrlInput.value;
+            displayYouTubeVideo(url);
+            const video_id = extractVideoIdFromUrl(url);
+
+            // Send video_id only when the WebSocket connection is open
+            if (socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ 'video_id': video_id }));
+            }
+        });
+
+        function extractVideoIdFromUrl(url) {
+            const urlObj = new URL(url);
+            const params = new URLSearchParams(urlObj.search);
+            return params.get('v');
+        }
+
+        function displayYouTubeVideo(url) {
+            const videoId = extractVideoIdFromUrl(url);
+            const videoPlayer = document.getElementById('videoPlayer');
+            videoPlayer.src = `https://www.youtube.com/embed/${videoId}`;
+        }
+
+        function onPlayerReady(event) {
+            // Player is ready
+        }
+
+        function onPlayerStateChange(event) {
+            console.log('change');
+            if (event.data === YT.PlayerState.PLAYING) {
+                const currentTime = player.getCurrentTime();
+                // Send data only when the WebSocket connection is open
+                if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({
+                        'state': 'PLAYING',
+                        'currentTime': currentTime,
+                    }));
+                }
+                console.log('Current playback time:', currentTime);
+            } else if (event.data === YT.PlayerState.PAUSED) {
+                const currentTime = player.getCurrentTime();
+                // Send data only when the WebSocket connection is open
+                if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({
+                        'state': 'PAUSED',
+                        'currentTime': currentTime,
+                    }));
+                }
+                console.log('Video paused at:', currentTime);
+            }
+        }
+
+        function handleVideoSync(state, currentTime) {
+            if (state === 'PLAYING') {
+                player.playVideo();
+                player.seekTo(currentTime);
+            } else if (state === 'PAUSED') {
+                player.pauseVideo();
+                player.seekTo(currentTime);
+            }
+        }
+    </script>
+</body>
+</html>
