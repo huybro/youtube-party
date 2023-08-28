@@ -43,7 +43,4 @@ def join_room(request):
 
 def room(request, room_name):
     response = render(request, "app/room.html", {"room_name": room_name})
-
-    response.set_cookie('user_id', value='12345',samesite='None', secure=True)
-
     return response
