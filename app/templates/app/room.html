@@ -21,7 +21,7 @@
     <script>
         const roomName = JSON.parse(document.getElementById('room-name').textContent);
         const socket = new WebSocket(
-            'wss://' + window.location.host + '/ws/app/' + roomName + '/'
+            'ws://' + window.location.host + '/ws/app/' + roomName + '/'
         );
 
         // Wait for the WebSocket connection to open before sending data
